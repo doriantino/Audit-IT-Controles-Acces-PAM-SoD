@@ -1,18 +1,6 @@
 import pandas as pd
 from datetime import datetime, timedelta
-from google.colab import drive # Importation de drive pour le montage
 import random # Pour générer des données synthétiques
-
-# --- Montage de Google Drive (non utilisé pour ce dataset généré, mais gardé pour référence) ---
-# Cette commande doit être exécutée une fois par session Colab pour accéder à votre Drive.
-# Si votre Drive est déjà monté, Colab vous le signalera.
-try:
-    drive.mount('/content/drive')
-    print("Google Drive monté avec succès (non utilisé directement pour ce script).")
-except Exception as e:
-    print(f"Erreur lors du montage de Google Drive : {e}. Assurez-vous d'être connecté et d'autoriser l'accès.")
-    # Continuer sans monter si erreur, le script ne dépend pas du Drive pour les données.
-
 
 # --- 1. Ingestion et Préparation des Données (Génération de données synthétiques) ---
 
@@ -20,11 +8,11 @@ def generate_synthetic_audit_data(num_records=1000):
     """Génère un dataset d'audit synthétique pour simuler des scénarios PAM et SoD."""
     data = []
     start_date = datetime(2025, 1, 1, 8, 0, 0)
-
+    
     users = ['user_finance_01', 'user_it_admin', 'user_hr_01', 'user_sales_01', 'user_finance_02', 'user_external_auditor']
-
+    
     controllers = ['Dashboard', 'Report', 'Invoice', 'Payment', 'UserManagement', 'AdminPanel', 'HRData', 'SalesCRM', 'SystemConfig', 'Supplier']
-
+    
     actions = {
         'Dashboard': ['View'],
         'Report': ['Generate', 'View'],
@@ -50,7 +38,7 @@ def generate_synthetic_audit_data(num_records=1000):
         user_id = random.choice(users)
         controller = random.choice(controllers)
         action = random.choice(actions.get(controller, ['View']))
-
+        
         # Simuler des actions privilégiées pour certains utilisateurs
         if user_id == 'user_it_admin' and random.random() < 0.7: # 70% de chance d'action privilégiée
             controller = random.choice(['UserManagement', 'AdminPanel', 'SystemConfig'])
@@ -114,13 +102,13 @@ def generate_synthetic_audit_data(num_records=1000):
             'duration': duration,
             'useragent': user_agent
         })
-
+    
     df = pd.DataFrame(data)
     # Convertir la colonne 'actiontime' en datetime pour l'utiliser comme timestamp
     df['timestamp'] = pd.to_datetime(df['actiontime'])
     # Assurez-vous que 'duration' est numérique, gère les erreurs et remplace les NaN par 0
     df['duration'] = pd.to_numeric(df['duration'], errors='coerce').fillna(0)
-
+    
     return df
 
 # Génération du DataFrame
@@ -143,10 +131,10 @@ privileged_controllers = ['UserManagement', 'AdminPanel', 'SystemConfig']
 
 def check_pam_violations(dataframe):
     pam_findings = []
-
+    
     # Trouver les utilisateurs qui effectuent des actions privilégiées
     privileged_activities = dataframe[dataframe['controller'].isin(privileged_controllers)].copy()
-
+    
     # Vérification 1 : Activité privilégiée en dehors des heures de bureau (ex: avant 8h ou après 18h)
     for index, row in privileged_activities.iterrows():
         hour = row['timestamp'].hour
@@ -158,14 +146,14 @@ def check_pam_violations(dataframe):
                 'Utilisateur': row['user_id'],
                 'Date': row['timestamp'].date()
             })
-
+            
     # Vérification 2 : Comptes à privilèges "dormants" (pas d'activité récente)
     # Ici, nous allons identifier les utilisateurs qui ont des activités privilégiées mais très sporadiques sur la période d'audit.
     # On considère une activité sporadique si moins de 5 actions privilégiées sur la période totale
     user_activity_counts = privileged_activities.groupby('user_id').size().reset_index(name='activity_count')
     # S'assurer que 'user_it_admin' est un utilisateur privilégié pour le test
     all_privileged_users = dataframe[dataframe['controller'].isin(privileged_controllers)]['user_id'].unique()
-
+    
     for user_id in all_privileged_users:
         if user_id not in user_activity_counts['user_id'].values:
             # L'utilisateur est considéré privilégié mais n'a eu aucune activité privilégiée
@@ -192,11 +180,11 @@ def check_pam_violations(dataframe):
         if not valid_durations.empty:
             mean_duration = valid_durations.mean()
             std_duration = valid_durations.std()
-
+            
             if std_duration > 0: # Éviter la division par zéro si toutes les durées sont identiques
                 long_duration_threshold = mean_duration + (3 * std_duration) # Plus de 3 écarts-types au-dessus de la moyenne
                 anomalous_duration_activities = privileged_activities[privileged_activities['duration'] > long_duration_threshold]
-
+                
                 for index, row in anomalous_duration_activities.iterrows():
                     pam_findings.append({
                         'Type de Constat': 'PAM - Durée d\'activité privilégiée anormale',
@@ -209,12 +197,12 @@ def check_pam_violations(dataframe):
     # Vérification 4 : Changement d'agent utilisateur suspect pour un utilisateur privilégié
     for user_id in privileged_activities['user_id'].unique():
         user_privileged_logs = privileged_activities[privileged_activities['user_id'] == user_id].sort_values(by='timestamp')
-
+        
         if len(user_privileged_logs) > 1:
             for i in range(len(user_privileged_logs) - 1):
                 current_log = user_privileged_logs.iloc[i]
                 next_log = user_privileged_logs.iloc[i+1]
-
+                
                 # Si le user_agent change radicalement en peu de temps (ex: moins de 5 minutes)
                 # On compare les user_agents bruts pour la simulation
                 if current_log['useragent'] != next_log['useragent'] and \
@@ -261,29 +249,29 @@ sod_conflicts = [
 
 def check_sod_violations(dataframe):
     sod_findings = []
-
+    
     for conflict_rule in sod_conflicts:
         num_actions_in_conflict = len(conflict_rule['actions'])
-
+        
         # Filtrer toutes les actions pertinentes pour cette règle de conflit
         relevant_actions_filters = []
         for action_def in conflict_rule['actions']:
             relevant_actions_filters.append(
-                (dataframe['controller'] == action_def['controller']) &
+                (dataframe['controller'] == action_def['controller']) & 
                 (dataframe['action'] == action_def['action'])
             )
-
+        
         # Combiner les filtres
         # Assurez-vous que relevant_actions_filters n'est pas vide
         if not relevant_actions_filters:
             continue
-
+            
         combined_filter = relevant_actions_filters[0]
         for i in range(1, len(relevant_actions_filters)):
             combined_filter = combined_filter | relevant_actions_filters[i]
-
+            
         potential_violations = dataframe[combined_filter].sort_values(by='timestamp')
-
+        
         # Regrouper par utilisateur pour vérifier les séquences
         for user_id, user_activities in potential_violations.groupby('user_id'):
             # Si l'utilisateur n'a pas assez d'activités pour former la séquence, passer
@@ -293,12 +281,12 @@ def check_sod_violations(dataframe):
             # Vérifier toutes les combinaisons possibles de séquences d'actions
             for i in range(len(user_activities) - num_actions_in_conflict + 1):
                 sequence = user_activities.iloc[i : i + num_actions_in_conflict]
-
+                
                 # Vérifier si toutes les actions de la règle sont présentes dans la séquence
                 # et si elles sont dans l'ordre défini (ou si l'ordre n'est pas strict, juste la présence)
                 # Pour la simplicité, nous vérifions juste la présence et la fenêtre de temps.
                 # Une implémentation réelle vérifierait l'ordre exact si nécessaire.
-
+                
                 # Vérifier que toutes les actions de la règle sont dans la séquence
                 all_actions_present = True
                 actions_in_sequence_tuples = [] # Utiliser des tuples pour une comparaison facile
@@ -309,11 +297,11 @@ def check_sod_violations(dataframe):
                     if (required_action['controller'], required_action['action']) not in actions_in_sequence_tuples:
                         all_actions_present = False
                         break
-
+                
                 if all_actions_present:
                     first_action_time = sequence.iloc[0]['timestamp']
                     last_action_time = sequence.iloc[-1]['timestamp']
-
+                    
                     if (last_action_time - first_action_time) <= timedelta(minutes=conflict_rule['time_window_minutes']):
                         # Correction de l'f-string ici
                         actions_str = ', '.join([f'{a["controller"]}/{a["action"]}' for a in conflict_rule['actions']])
@@ -328,7 +316,7 @@ def check_sod_violations(dataframe):
                         # Pour éviter les doublons si une séquence est un sous-ensemble d'une autre
                         # ou si des activités se chevauchent, on pourrait ajouter un mécanisme de déduplication
                         # ou ajuster la boucle pour avancer de 'num_actions_in_conflict'
-
+                        
     return sod_findings
 
 
