@@ -1,6 +1,7 @@
 import pandas as pd
 from datetime import datetime, timedelta
 import random # Pour générer des données synthétiques
+import os # Pour gérer les chemins de fichiers et créer des dossiers
 
 # --- 1. Ingestion et Préparation des Données (Génération de données synthétiques) ---
 
@@ -39,6 +40,9 @@ def generate_synthetic_audit_data(num_records=1000):
         controller = random.choice(controllers)
         action = random.choice(actions.get(controller, ['View']))
         
+        # Initialisation par défaut de user_agent pour garantir qu'il est toujours défini
+        user_agent = random.choice(user_agents) 
+
         # Simuler des actions privilégiées pour certains utilisateurs
         if user_id == 'user_it_admin' and random.random() < 0.7: # 70% de chance d'action privilégiée
             controller = random.choice(['UserManagement', 'AdminPanel', 'SystemConfig'])
@@ -48,8 +52,7 @@ def generate_synthetic_audit_data(num_records=1000):
             action = random.choice(actions.get(controller, ['View']))
         elif user_id == 'user_external_auditor' and random.random() < 0.3: # Simuler un changement d'agent suspect
             user_agent = random.choice(user_agents) if random.random() < 0.9 else "MaliciousAgent/1.0 (Linux)"
-        else:
-            user_agent = random.choice(user_agents)
+        # Note: L'instruction 'else' pour user_agent n'est plus nécessaire ici car il est initialisé par défaut.
 
         action_time = start_date + timedelta(minutes=random.randint(1, 1440 * 30)) # Sur 30 jours
         duration = random.randint(1, 300) # Durée en secondes
@@ -304,13 +307,13 @@ def check_sod_violations(dataframe):
                     
                     if (last_action_time - first_action_time) <= timedelta(minutes=conflict_rule['time_window_minutes']):
                         # Correction de l'f-string ici
-                        actions_str = ', '.join([f'{a["controller"]}/{a["action"]}' for a in conflict_rule['actions']])
+                        actions_str = ', '.join([f"{a['controller']}/{a['action']}" for a in conflict_rule['actions']])
                         sod_findings.append({
                             'Type de Constat': 'SoD - Conflit de séquence détecté',
                             'Gravité': 'Élevée',
                             'Description': f"L'utilisateur '{user_id}' a effectué une séquence d'actions conflictuelles ({actions_str}) dans une fenêtre de {conflict_rule['time_window_minutes']} minutes, ce qui constitue un conflit de Séparation des Tâches : {conflict_rule['risk']}.",
                             'Utilisateur': user_id,
-                            'Actions Conflituelles': [f'{a["controller"]}/{a["action"]}' for a in conflict_rule['actions']],
+                            'Actions Conflituelles': [f"{a['controller']}/{a['action']}" for a in conflict_rule['actions']],
                             'Période': f"{first_action_time} à {last_action_time}"
                         })
                         # Pour éviter les doublons si une séquence est un sous-ensemble d'une autre
@@ -320,64 +323,96 @@ def check_sod_violations(dataframe):
     return sod_findings
 
 
-# --- 3. Exécution de l'Audit et Génération des Constats ---
-print("\n--- Exécution de l'Audit ---")
-pam_results = check_pam_violations(df)
-sod_results = check_sod_violations(df)
-
-print("\n--- Constats PAM ---")
-if pam_results:
-    for finding in pam_results:
-        print(f"[{finding['Gravité']}] {finding['Description']}")
-else:
-    print("Aucun constat PAM majeur détecté dans cet échantillon.")
-
-print("\n--- Constats SoD ---")
-if sod_results:
-    for finding in sod_results:
-        print(f"[{finding['Gravité']}] {finding['Description']}")
-else:
-    print("Aucun conflit SoD détecté dans cet échantillon.")
-
-
 # --- 4. Module de Recommandations (Conceptuel) ---
 # Ce module lierait les constats à des recommandations prédéfinies.
 
 def generate_recommendations(findings):
-    recommendations = []
+    # Dictionnaire pour stocker les recommandations regroupées par type de constat
+    grouped_recommendations = {}
+    
     for finding in findings:
-        if "PAM - Activité hors heures ouvrées" in finding['Type de Constat']:
-            recommendations.append(f"Pour le constat '{finding['Type de Constat']}' (Utilisateur: {finding['Utilisateur']}), il est recommandé de : "
-                                   f"1. Mettre en place des plages horaires d'accès strictes pour les comptes à privilèges. "
-                                   f"2. Implémenter une solution de Privileged Access Management (PAM) pour la gestion des sessions et la traçabilité en temps réel. "
-                                   f"3. Revoir la politique d'authentification pour inclure la Multi-Factor Authentication (MFA) sur ces comptes, conformément à l'ISO 27001 (A.9.2.4) et aux exigences du RGPD (Article 32) pour la protection des données.")
-        elif "PAM - Activité privilégiée sporadique" in finding['Type de Constat']:
-            recommendations.append(f"Pour le constat '{finding['Type de Constat']}' (Utilisateur: {finding['Utilisateur']}), il est recommandé de : "
-                                   f"1. Procéder à une revue des comptes à privilèges inactifs ou sous-utilisés. "
-                                   f"2. Désactiver ou supprimer les comptes non nécessaires, conformément à l'ISO 27001 (A.9.2.1).")
-        elif "PAM - Durée d'activité privilégiée anormale" in finding['Type de Constat']:
-            recommendations.append(f"Pour le constat '{finding['Type de Constat']}' (Utilisateur: {finding['Utilisateur']}), il est recommandé de : "
-                                   f"1. Mettre en place une surveillance en temps réel des sessions privilégiées pour détecter les durées anormales. "
-                                   f"2. Investiguer les cas de sessions excessivement longues pour comprendre la cause et s'assurer de la légitimité de l'activité. "
-                                   f"3. Renforcer les contrôles d'accès à distance et les mécanismes de déconnexion automatique.")
-        elif "PAM - Changement suspect d'agent utilisateur" in finding['Type de Constat']:
-            recommendations.append(f"Pour le constat '{finding['Type de Constat']}' (Utilisateur: {finding['Utilisateur']}), il est recommandé de : "
-                                   f"1. Implémenter une surveillance des attributs de session (comme l'agent utilisateur, l'adresse IP source) pour les comptes privilégiés. "
-                                   f"2. Mettre en place des alertes automatiques en cas de changement brusque de ces attributs. "
-                                   f"3. Exiger une ré-authentification forte en cas de détection d'un comportement suspect, conformément aux principes de sécurité adaptative.")
-        elif "SoD - Conflit de séquence détecté" in finding['Type de Constat']:
-            recommendations.append(f"Pour le constat '{finding['Type de Constat']}' (Utilisateur: {finding['Utilisateur']}), il est recommandé de : "
-                                   f"1. Réviser les rôles et permissions de l'utilisateur '{finding['Utilisateur']}' dans le système pour éliminer le cumul de fonctions conflictuelles. "
-                                   f"2. Mettre en place une matrice de SoD claire et l'intégrer dans le processus d'attribution des rôles. "
-                                   f"3. En l'absence de séparation stricte, implémenter des contrôles compensatoires efficaces (ex: revue et approbation par un tiers indépendant), en ligne avec le SOX (Section 404) et l'ISO 27001 (A.6.1.2). "
-                                   f"4. Utiliser des outils d'analyse de SoD pour scanner régulièrement les droits et les activités.")
-    return recommendations
+        finding_type = finding['Type de Constat']
+        recommendation_text = ""
 
-print("\n--- Recommandations ---")
-all_findings = pam_results + sod_results
-recommendations_list = generate_recommendations(all_findings)
-if recommendations_list:
-    for rec in recommendations_list:
-        print(f"- {rec}\n")
-else:
-    print("Aucune recommandation générée car aucun constat n'a été détecté.")
+        if "PAM - Activité hors heures ouvrées" == finding_type:
+            recommendation_text = (
+                f"Pour le constat '{finding_type}' (Utilisateur: {finding['Utilisateur']}), il est recommandé de : \n"
+                f"  - Mettre en place des plages horaires d'accès strictes pour les comptes à privilèges.\n"
+                f"  - Implémenter une solution de Privileged Access Management (PAM) pour la gestion des sessions et la traçabilité en temps réel.\n"
+                f"  - Revoir la politique d'authentification pour inclure la Multi-Factor Authentication (MFA) sur ces comptes, conformément à l'ISO 27001 (A.9.2.4) et aux exigences du RGPD (Article 32) pour la protection des données."
+            )
+        elif "PAM - Activité privilégiée sporadique" == finding_type:
+            recommendation_text = (
+                f"Pour le constat '{finding_type}' (Utilisateur: {finding['Utilisateur']}), il est recommandé de : \n"
+                f"  - Procéder à une revue des comptes à privilèges inactifs ou sous-utilisés.\n"
+                f"  - Désactiver ou supprimer les comptes non nécessaires, conformément à l'ISO 27001 (A.9.2.1)."
+            )
+        elif "PAM - Durée d'activité privilégiée anormale" == finding_type:
+            recommendation_text = (
+                f"Pour le constat '{finding_type}' (Utilisateur: {finding['Utilisateur']}), il est recommandé de : \n"
+                f"  - Mettre en place une surveillance en temps réel des sessions privilégiées pour détecter les durées anormales.\n"
+                f"  - Investiguer les cas de sessions excessivement longues pour comprendre la cause et s'assurer de la légitimité de l'activité.\n"
+                f"  - Renforcer les contrôles d'accès à distance et les mécanismes de déconnexion automatique."
+            )
+        elif "PAM - Changement suspect d'agent utilisateur" == finding_type:
+            recommendation_text = (
+                f"Pour le constat '{finding_type}' (Utilisateur: {finding['Utilisateur']}), il est recommandé de : \n"
+                f"  - Implémenter une surveillance des attributs de session (comme l'agent utilisateur, l'adresse IP source) pour les comptes privilégiés.\n"
+                f"  - Mettre en place des alertes automatiques en cas de changement brusque de ces attributs.\n"
+                f"  - Exiger une ré-authentification forte en cas de détection d'un comportement suspect, conformément aux principes de sécurité adaptative."
+            )
+        elif "SoD - Conflit de séquence détecté" == finding_type:
+            recommendation_text = (
+                f"Pour le constat '{finding_type}' (Utilisateur: {finding['Utilisateur']}), il est recommandé de : \n"
+                f"  - Réviser les rôles et permissions de l'utilisateur '{finding['Utilisateur']}' dans le système pour éliminer le cumul de fonctions conflictuelles.\n"
+                f"  - Mettre en place une matrice de SoD claire et l'intégrer dans le processus d'attribution des rôles.\n"
+                f"  - En l'absence de séparation stricte, implémenter des contrôles compensatoires efficaces (ex: revue et approbation par un tiers indépendant), en ligne avec le SOX (Section 404) et l'ISO 27001 (A.6.1.2).\n"
+                f"  - Utiliser des outils d'analyse de SoD pour scanner régulièrement les droits et les activités."
+            )
+        
+        if recommendation_text:
+            if finding_type not in grouped_recommendations:
+                grouped_recommendations[finding_type] = []
+            grouped_recommendations[finding_type].append(recommendation_text)
+            
+    return grouped_recommendations
+
+
+# --- 3. Exécution de l'Audit et Génération des Constats ---
+# Définir le chemin du dossier "Test" et du fichier de résultats
+output_folder = "Test"
+output_file_path = os.path.join(output_folder, "results.txt")
+
+# Créer le dossier "Test" s'il n'existe pas
+os.makedirs(output_folder, exist_ok=True)
+
+# Ouvrir le fichier de résultats en mode écriture
+with open(output_file_path, "w", encoding="utf-8") as f:
+    f.write("Rapport d'Audit - Recommandations\n")
+    f.write("=" * 35 + "\n\n") # Ligne de séparation pour le titre
+
+    print("\n--- Exécution de l'Audit ---") # Garder l'affichage console pour le début
+
+    pam_results = check_pam_violations(df)
+    sod_results = check_sod_violations(df)
+    all_findings = pam_results + sod_results # Collecter tous les constats pour les recommandations
+
+    f.write("--- Recommandations ---\n\n")
+    print("\n--- Recommandations ---")
+    
+    grouped_recommendations_dict = generate_recommendations(all_findings)
+    
+    if grouped_recommendations_dict:
+        for finding_type, recommendations_list in grouped_recommendations_dict.items():
+            f.write(f"### Type de Constat : {finding_type}\n\n")
+            print(f"\n### Type de Constat : {finding_type}")
+            for i, rec_text in enumerate(recommendations_list):
+                # Les recommandations sont déjà formatées avec des puces dans la fonction generate_recommendations
+                f.write(f"{rec_text}\n\n") 
+                print(f"{rec_text.strip()}\n") # Afficher aussi sur console
+    else:
+        line = "Aucune recommandation générée car aucun constat n'a été détecté.\n"
+        f.write(line)
+        print(line.strip())
+
+print(f"\nLes résultats de l'audit ont été enregistrés dans : {output_file_path}")
