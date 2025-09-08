@@ -1,4 +1,4 @@
-## Projet d'Audit IT Simulé pour Démonstration de Compétences
+## Projet d'Audit IT Simulé
 
 **Auteur :** Dorian Dikoume (Profil IT Advisory & Data Analyst)
 **Date du Rapport :** 9 juillet 2025
