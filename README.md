@@ -8,7 +8,7 @@
 
 ### 1. Introduction
 
-Ce projet GitHub présente une simulation d'audit des contrôles d'accès logiques, avec un accent particulier sur la **Gestion des Comptes à Privilèges (PAM)** et la **Séparation des Tâches (SoD)** au sein de systèmes d'information critiques. Il a été conçu pour démontrer mes compétences en tant qu'**IT Audit & Advisory**, en abordant des problématiques réelles de sécurité, de fraude, d'erreur opérationnelle et de non-conformité réglementaire.
+Ce projet GitHub présente une simulation d'audit des contrôles d'accès logiques, avec un accent particulier sur la **Gestion des Comptes à Privilèges (PAM)** et la **Séparation des Tâches (SoD)** au sein de systèmes d'information critiques. Il a été conçu en abordant des problématiques réelles de sécurité, de fraude, d'erreur opérationnelle et de non-conformité réglementaire.
 
 Dans un environnement numérique où les cybermenaces et les risques internes sont omniprésents, des contrôles d'accès robustes sont la pierre angulaire de la sécurité et de la conformité. Cet audit simulé illustre une approche rigoureuse pour identifier les faiblesses et proposer des recommandations concrètes.
 
